@@ -1,0 +1,469 @@
+TRABAJO EN MATERIA METODOS ESTADISTICOS-MAESTRIA EN ANALITICA DE DATOS-SONIA ARDILA-ELIAS BUITRAGO
+
+pacientes <- read.csv("pacientes.csv")
+View(pacientes)
+
+library(cluster, lib.loc = "/usr/lib/R/library")
+library(corrplot)
+library(curl, lib.loc = "/usr/lib/R/site-library")
+library(data.table, lib.loc = "/usr/lib/R/site-library")
+library(dplyr)
+library(factoextra)
+library(FactoMineR)
+library(future.apply)
+library(ggpubr)
+library(plyr)
+library(purrr)
+library(psych)
+library(scales)
+str(pacientes)
+
+#EDA explorando con solo variables numéricas. Transformación de variables
+pacientes_2 <- pacientes %>%
+mutate(Fumador.Activo = ifelse(Fumador.Activo == "Si","1","0"),
+X.Diabetes. = ifelse(X.Diabetes. == "Si","1","0"),
+Hipertensión.Arterial.Sistemica = ifelse(Hipertensión.Arterial.Sistemica == "Si","1","0"),
+HTA...DM = ifelse(HTA...DM == "Si","1","0"),
+Antecedentes.Fliar..Enfermedad.Coronaria = ifelse(Antecedentes.Fliar..Enfermedad.Coronaria == "Si","1","0"),
+HTA.COMPENSADOS = ifelse(HTA.COMPENSADOS == "Si","1","0"),
+HTA.Y.DM.COMPENSADA = ifelse(HTA.Y.DM.COMPENSADA == "Si","1","0"))
+
+#Ajuste tipo variables
+pacientes_2$Fumador.Activo = gsub(",", "", pacientes_2$Fumador.Activo) %>% as.numeric()
+pacientes_2$X.Diabetes. = gsub(",", "", pacientes_2$X.Diabetes.) %>% as.numeric()
+pacientes_2$Hipertensión.Arterial.Sistemica = gsub(",", "", pacientes_2$Hipertensión.Arterial.Sistemica) %>% as.numeric()
+pacientes_2$HTA...DM = gsub(",", "", pacientes_2$HTA...DM) %>% as.numeric()
+pacientes_2$Antecedentes.Fliar..Enfermedad.Coronaria = gsub(",", "", pacientes_2$Antecedentes.Fliar..Enfermedad.Coronaria) %>% as.numeric()
+pacientes_2$HTA.COMPENSADOS = gsub(",", "", pacientes_2$HTA.COMPENSADOS) %>% as.numeric()
+pacientes_2$DM.COMPENSADO = gsub(",", "", pacientes_2$DM.COMPENSADO) %>% as.numeric()
+pacientes_2$HTA.Y.DM.COMPENSADA = gsub(",", "", pacientes_2$HTA.Y.DM.COMPENSADA) %>% as.numeric()
+pacientes_2$Calculo.de..TFG.corregida..Cockcroft.Gault. = gsub(",", "", pacientes_2$Calculo.de..TFG.corregida..Cockcroft.Gault.) %>% as.numeric()
+
+library(psych)
+#Explorar correlaciones por grupos de tios de indicadores (relacionados con enfermedades)
+pairs.panels(pacientes_2[,c(11,12,37,39,5,6,7)], bg = c("red", "white", "black","blue"),pch=28,
+main = "Relación Tensión arterial con variables salida")    
+pairs.panels(pacientes_2[,c(11,12,37,39,5,6,7)], pch=28,     
+main = "Relación Tensión arterial con cinco variables salida")
+pairs.panels(pacientes_2[,c(11,12,37,39,5,6,7)], method= "pearson",density="TRUE", ellipses= FALSE, pch=28,
+main = "Relación Tensión arterial con cinco variables salida")
+pairs.panels(pacientes_2[,c(14,15,17,16,37,39,5,6,7)], bg = c("red", "white", "black","blue"),pch=28,
+main = "Relación Colesterol y Triglicéridos con cinco variables salida")
+pairs.panels(pacientes_2[,c(19,37,39,5,6,7)], bg = c("red", "white", "black","blue"),pch=28,
+main = "Hemoglobina con cinco variables salida")
+pairs.panels(pacientes_2[,c(22,23,37,39,5,6,7)], bg = c("red", "white", "black","blue"),pch=28,
+main = "Glicemia con cinco variables salida")
+pairs.panels(pacientes_2[,c(30,32,33,34,37,39,5,6,7)], bg = c("red", "white", "black","blue"),pch=28,
+main = "Función Renal con cinco variables salida")
+
+#Correlaciones
+library(corrplot)
+#correlacion de edad, estar medicado(2) y tener una o las dos enfermedades cronicas (6 variables)
+# vs tension + imc
+cor(pacientes_2[,c(1,37,39,5,6,7,11,12,28)],use = "complete.obs")
+#correlacion de edad, estar medicado(2) y tener una o las dos enfermedades cronicas (6 variables)
+# vs colesterol y trigliceridos
+cor(pacientes_2[,c(1,37,39,5,6,7,14,15,17,16)],use = "complete.obs")
+#correlacion de edad, estar medicado(2) y tener una o las dos enfermedades cronicas (6 variables)
+# vs hemoglobina y glicemia
+cor(pacientes_2[,c(1,37,39,5,6,7,19,22)],use = "complete.obs")
+#correlacion de edad, estar medicado(2) y tener una o las dos enfermedades cronicas (6 variables)
+# vs orina y funcion renal
+cor(pacientes_2[,c(1,37,39,5,6,7,30,32,33,34)],use = "complete.obs")
+
+#Descubriendo a qué corresponde género 1 y género 2 porque el dataset no tiene metadata.
+#Se usaron tablas antropométricas de colombianos (U de Antioquia)
+datos %>% mutate(edad_rango =  ifelse((20 <= `Edad (años)` & `Edad (años)` <= 29), "20-29",
+            ifelse((30 <= `Edad (años)` & `Edad (años)` <= 39), "30-39",
+            ifelse((40 <= `Edad (años)` & `Edad (años)` <= 49), "40-49",
+            ifelse((50 <= `Edad (años)` & `Edad (años)` <= 59), "50-59","60+"))))) -> eval_genero
+            
+#Tabla de contigencia entre Genero y Edad por rangos
+table(eval_genero$Genero, eval_genero$edad_rango)     
+
+# Total de pacientes por genero menores a 60 años
+table(eval_genero$Genero, eval_genero$edad_rango) %>% as.matrix() %>% "[" (, 1:4) %>% rowSums()
+
+# Talla general
+eval_genero  %>% filter(Genero == 1) %>% dplyr::select(Talla) %>% summary()
+eval_genero  %>% filter(Genero == 2) %>% dplyr::select(Talla) %>% summary()
+
+# Peso general
+eval_genero  %>% filter(Genero == 1) %>% dplyr::select(Peso) %>% summary()
+eval_genero  %>% filter(Genero == 2) %>% dplyr::select(Peso) %>% summary()
+
+#IMC general
+eval_genero  %>% filter(Genero == 1) %>% dplyr::select(IMC) %>% summary()
+eval_genero  %>% filter(Genero == 2) %>% dplyr::select(IMC) %>% summary()
+
+## Genero 1
+
+# Talla
+eval_genero  %>% filter(Genero == 1 & edad_rango == "20-29") %>% dplyr::select(Talla) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "30-39") %>% dplyr::select(Talla) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "40-49") %>% dplyr::select(Talla) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "50-59") %>% dplyr::select(Talla) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "60+") %>% dplyr::select(Talla) %>% summary()
+
+# Peso
+eval_genero  %>% filter(Genero == 1 & edad_rango == "20-29") %>% dplyr::select(Peso) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "30-39") %>% dplyr::select(Peso) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "40-49") %>% dplyr::select(Peso) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "50-59") %>% dplyr::select(Peso) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "60+") %>% dplyr::select(Peso) %>% summary()
+
+# IMC
+eval_genero  %>% filter(Genero == 1 & edad_rango == "20-29") %>% dplyr::select(IMC) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "30-39") %>% dplyr::select(IMC) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "40-49") %>% dplyr::select(IMC) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "50-59") %>% dplyr::select(IMC) %>% summary()
+eval_genero  %>% filter(Genero == 1 & edad_rango == "60+") %>% dplyr::select(IMC) %>% summary()
+
+## Genero 2
+
+# Talla
+eval_genero  %>% filter(Genero == 2 & edad_rango == "20-29") %>% dplyr::select(Talla) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "30-39") %>% dplyr::select(Talla) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "40-49") %>% dplyr::select(Talla) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "50-59") %>% dplyr::select(Talla) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "60+") %>% dplyr::select(Talla) %>% summary()
+
+# Peso
+eval_genero  %>% filter(Genero == 2 & edad_rango == "20-29") %>% dplyr::select(Peso) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "30-39") %>% dplyr::select(Peso) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "40-49") %>% dplyr::select(Peso) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "50-59") %>% dplyr::select(Peso) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "60+") %>% dplyr::select(Peso) %>% summary()
+
+# IMC
+eval_genero  %>% filter(Genero == 2 & edad_rango == "20-29") %>% dplyr::select(IMC) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "30-39") %>% dplyr::select(IMC) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "40-49") %>% dplyr::select(IMC) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "50-59") %>% dplyr::select(IMC) %>% summary()
+eval_genero  %>% filter(Genero == 2 & edad_rango == "60+") %>% dplyr::select(IMC) %>% summary()
+
+#Prueba de medias para el grupo 1 vs Mujeres
+mood.medtest(peso_m,peso_m1)
+mood.medtest(talla_m,talla_m1)
+mood.medtest(imc_m,imc_m1)
+
+cbind(peso_m,peso_m1)
+cbind(talla_m,talla_m1)
+cbind(imc_m,imc_m1)
+
+#Prueba de medias para el grupo 1 vs Hombres
+mood.medtest(peso_h,peso_m2)
+mood.medtest(talla_h,talla_m2)
+mood.medtest(imc_h,imc_m2)
+
+cbind(peso_h,peso_m2, peso_m, peso_m1)
+cbind(talla_h,talla_m2)
+cbind(imc_h,imc_m2)
+
+datos %>% mutate(Genero = ifelse(Genero == 1, "F",
+                  ifelse(Genero == 2, "M", NA))) -> genero
+                  
+#PCA para buscar reducir dimensiones
+datos <- pacientes
+
+datos %>% select(-X42) -> datos
+datos%>%  
+  mutate(id = 1:nrow(datos),
+         `Clasificación.de.RCV.Global` = ifelse(`Clasificación.de.RCV.Global` == "ALTO",  "MUY ALTO",
+                        `Clasificación.de.RCV.Global`)) -> datos
+
+datos %>% select(c(id,`Edad (años)`, `Perimetro Abdominal`, Talla, Peso, IMC,
+                   `Tension SISTOLICA`, `Tension DIASTOLICA`,
+                   `Colesterol Total`, `Colesterol HDL`, `Colesterol LDL`,
+                   Trigliceridos, `Glicemia de ayuno`, Creatinina, 
+                   Proteinuria, `Calculo de  TFG corregida (Cockcroft-Gault)`, 
+                   Estatina, `Farmacos  Antihipertensivos`, Antidiabeticos))  -> base_num
+
+base_num %>% apply(2, as.double) %>% data.frame() %>% setNames(colnames(base_num)) -> base_num
+
+base_num %>% na.omit() -> base_num
+
+base_num$id %>%  data.frame() %>% setNames("id")-> id_num
+
+datos %>% select(-c(`Edad (años)`, `Perimetro Abdominal`, Talla, Peso, IMC,
+                   `Tension SISTOLICA`, `Tension DIASTOLICA`,
+                   `Colesterol Total`, `Colesterol HDL`, `Colesterol LDL`,
+                   Trigliceridos, `Glicemia de ayuno`, Creatinina, 
+                   Proteinuria, `Calculo de  TFG corregida (Cockcroft-Gault)`, 
+                   Estatina, `Clasificación de RCV Global`))  -> base_cat
+
+datos %>% select(c(id, `Fumador Activo`, `¿Diabetes?`, `Hipertensión Arterial Sistemica`, 
+                      `HTA + DM`, `Estadio IRC`, `Antecedentes Fliar  Enfermedad Coronaria`,
+                      `Complicaciones  y Lesiones en Organo Blanco`, `Clasificación perímetro abdominal`,
+                      `CLAIFICACION IMC`)) -> base_cat
+                      
+base_cat %>% summary()
+
+id_num %>% left_join(base_cat) -> base_cat
+
+base_cat %>% na.omit() -> base_cat
+
+base_cat$id %>%  data.frame() %>% setNames("id") -> id_cat
+
+base_cat %>% select(-id) ->  base_cat
+
+id_cat %>% left_join(base_num) -> base_num
+
+
+base_num %>% select(-id) -> base_num
+
+base_num %>% scale() %>% data.frame() %>% setNames(colnames(base_num)) ->  base_num
+
+
+
+base_num %>% cor %>% corrplot.mixed(lower = "number", upper = "color", number.cex = 0.6, tl.cex = 0.6, lower.col = "#aaaaaa") 
+base_num %>%  PCA(scale.unit = F) -> pca_num
+
+pca_num %>% summary()
+
+fviz_screeplot(pca_num, addlables = F, cex = 0.3)
+
+
+base_cat %>% MCA(graph = F) -> acm_cat
+
+acm_cat %>% summary()
+
+fviz_screeplot(acm_cat, addlables = F, cex = 0.3)
+
+PC <- pca_num$ind$coord
+MC <- acm_cat$ind$coord   
+
+#Regresion logística
+pacientes_2$Fumador.Activo = gsub(",", "", pacientes_2$Fumador.Activo) %>% as.numeric()
+pacientes_2$X.Diabetes. = gsub(",", "", pacientes_2$X.Diabetes.) %>% as.numeric()
+pacientes_2$Hipertensión.Arterial.Sistemica = gsub(",", "", pacientes_2$Hipertensión.Arterial.Sistemica) %>% as.numeric()
+pacientes_2$HTA...DM = gsub(",", "", pacientes_2$HTA...DM) %>% as.numeric()
+pacientes_2$Antecedentes.Fliar..Enfermedad.Coronaria = gsub(",", "", pacientes_2$Antecedentes.Fliar..Enfermedad.Coronaria) %>% as.numeric()
+pacientes_2$HTA.COMPENSADOS = gsub(",", "", pacientes_2$HTA.COMPENSADOS) %>% as.numeric()
+pacientes_2$DM.COMPENSADO = gsub(",", "", pacientes_2$DM.COMPENSADO) %>% as.numeric()
+pacientes_2$HTA.Y.DM.COMPENSADA = gsub(",", "", pacientes_2$HTA.Y.DM.COMPENSADA) %>% as.numeric()
+pacientes_2$Calculo.de..TFG.corregida..Cockcroft.Gault. = gsub(",", "", pacientes_2$Calculo.de..TFG.corregida..Cockcroft.Gault.) %>% as.numeric()
+str(pacientes_2)
+Regresion_Logistica <- glm(Clasificación.de.RCV.Global ~ Edad..años.+ Fumador.Activo +
+X.Diabetes. + Hipertensión.Arterial.Sistemica + HTA...DM +
+Antecedentes.Fliar..Enfermedad.Coronaria + Tension.SISTOLICA +
+Tension.DIASTOLICA + HTA.COMPENSADOS + Colesterol.Total +
+Colesterol.HDL + Trigliceridos + Colesterol.LDL + Hemoglobina.A1C +
+Glicemia.de.ayuno + Creatinina + Factor.de.corrección.de.la.formula +
+Microalbuminuria  + Proteinuria + Calculo.de..TFG.corregida..Cockcroft.Gault.+
+Farmacos..Antihipertensivos + Antidiabeticos, data = pacientes_2, family = "binomial")
+#Regresion_Logistica
+summary(Regresion_Logistica)    
+
+#Cluster KMeans
+# Base Numerica de las variables significativas ####
+
+datos %>% dplyr::select(`Clasificación de RCV Global`,
+                 `Edad (años)`, 
+                 `Colesterol Total`, 
+                 `Tension SISTOLICA`,
+                 `Colesterol HDL`,
+                 Trigliceridos,
+                 `Glicemia de ayuno`,
+                 IMC) -> base_num_sig
+                 
+# Agrupamiento Jerarquico
+#Metodo de aglomeracion WARD y distancias euclidiana'
+
+dendrogram <- hclust(dist(base_num_sig[, -1] %>% scale(), method = 'euclidean'), method = 'ward.D')
+# ggdendrogram(dendrogram, rotate = FALSE, labels = FALSE, theme_dendro = TRUE) + 
+#   labs(title = "Dendrograma")
+
+clases_aj <- cutree(dendrogram, k = 3)
+
+base_num_sig$cluster <- clases_aj
+
+
+jerar_matriz_confusion <- table(base_num_sig$`Clasificación de RCV Global`, base_num_sig$cluster,
+                                dnn = c("observaciones", "predicciones"))
+
+jerar_matriz_confusion                 
+sum(diag(jerar_matriz_confusion))/sum(jerar_matriz_confusion)*100
+
+# Kmeans    
+set.seed(12234)
+kmeans <- kmeans(base_num_sig[,-1] %>% scale(), 3, iter.max = 1000000000, nstart = 25)
+
+
+base_num_sig$cluster <- kmeans$cluster
+
+
+kmeans_matriz_confusion <- table(base_num_sig$`Clasificación de RCV Global`
+                                 , base_num_sig$cluster,
+      dnn = c("observaciones", "predicciones"))
+
+kmeans_matriz_confusion
+
+sum(diag(kmeans_matriz_confusion))/sum(kmeans_matriz_confusion)*100
+
+#Arboles de decisión (Clasificación y Regresión)
+
+library(partykit)
+require(CHAID)
+library(readr)
+library(dplyr)
+library(FactoMineR)
+library(factoextra)
+library(ggplot2)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(ggcorrplot)
+library(GGally)
+library(psych)
+library(VIM)
+library(tree)
+library(nnet)
+library(vcd)
+library(MASS)
+library(ggdendro)
+library(randomForest)
+
+#Importar datos
+datos<- read_csv("pacientes.csv")
+
+datos %>% dplyr::select(-X42) -> datos
+
+datos %>%  
+  mutate(
+         `Clasificación de RCV Global` =
+           ifelse(`Clasificación de RCV Global` == "ALTO",  "MUY ALTO",
+           `Clasificación de RCV Global`),
+         `Clasificación de RCV Global` = `Clasificación de RCV Global` %>%
+           factor(levels = c("LATENTE", "INTERMEDIO", "MUY ALTO" )),
+         `Clasificación de RCV Global` = `Clasificación de RCV Global` %>% factor(),
+         `Edad (años)` = `Edad (años)` %>% as.numeric(),
+         `Perimetro Abdominal` = `Perimetro Abdominal` %>% as.numeric(),
+         Talla = Talla %>% as.numeric(), 
+         Peso = Peso %>% as.numeric(),
+         IMC = IMC %>% as.numeric(),
+         `Tension SISTOLICA`= `Tension SISTOLICA` %>% as.numeric(),
+         `Tension DIASTOLICA` = `Tension DIASTOLICA` %>% as.numeric(),
+         `Colesterol Total`= `Colesterol Total` %>% as.numeric(),
+         `Colesterol HDL` = `Colesterol HDL` %>% as.numeric(),
+         `Colesterol LDL` = `Colesterol LDL` %>% as.numeric(),
+         Trigliceridos, `Glicemia de ayuno`, Creatinina, 
+         Proteinuria = Proteinuria %>% as.numeric(),
+         `Calculo de  TFG corregida (Cockcroft-Gault)` = 
+           `Calculo de  TFG corregida (Cockcroft-Gault)` %>% as.numeric(), 
+         Estatina = Estatina %>% as.numeric(),
+         `Farmacos  Antihipertensivos` =
+           `Farmacos  Antihipertensivos` %>% as.numeric(),
+         Antidiabeticos = Antidiabeticos %>% as.numeric(),
+         `Fumador Activo` = `Fumador Activo` %>% factor(),
+         `¿Diabetes?` = `¿Diabetes?` %>% as.factor(),
+         `Hipertensión Arterial Sistemica` =
+           `Hipertensión Arterial Sistemica` %>% as.factor(), 
+         `HTA + DM` = `HTA + DM` %>% as.factor(),
+         `Estadio IRC` = `Estadio IRC` %>% as.factor(),
+         `Antecedentes Fliar  Enfermedad Coronaria` = 
+           `Antecedentes Fliar  Enfermedad Coronaria` %>% as.factor(),
+         `Complicaciones  y Lesiones en Organo Blanco` =
+           `Complicaciones  y Lesiones en Organo Blanco` %>% as.factor(),
+         `Clasificación perímetro abdominal` =
+           `Clasificación perímetro abdominal` %>% as.factor(),
+         `CLAIFICACION IMC` = `CLAIFICACION IMC` %>% as.factor(),
+         Genero = Genero %>% as.factor(),
+         Zona = Zona %>% as.factor()) -> datos
+
+# Eliminar Variables con mayor cantidad de NAs o no necesarias
+datos <- datos %>%
+  dplyr::select(-c(`Hemoglobina A1C`, `DM COMPENSADO`,
+  Microalbuminuria, Observaciones, `Glicemia  Pos prandial`)) %>% 
+  na.omit()
+
+#Arbol de clasificación completo
+arbol_clasif <- rpart(formula = `Clasificación de RCV Global` ~ ., data = datos, control = rpart.control(cp = 0), method = "class")
+
+rpart.plot(arbol_clasif,  extra = 106)
+
+#Matriz de confusión
+prediccion_poda <- predict(arbol_clasif, newdata = datos, type = 'class')
+table(prediccion_poda, datos$`Clasificación de RCV Global`) ->  matriz_confusion
+matriz_confusion
+
+#Porcentaje de predicción
+paste((matriz_confusion %>% diag() %>% sum()/matriz_confusion %>% sum() * 100) %>% round(2), "%")
+plotcp(arbol_clasif)
+
+arbol_clasif$cptable[which.min(arbol_clasif$cptable[,"xerror"]), "CP"] -> min_error
+paste0("CP con el minimo error: ", min_error )
+
+#Arbol con poda con el mínimo valor de error
+arbol_1 <- rpart(formula = `Clasificación de RCV Global` ~ ., data = datos, control = rpart.control(cp = min_error), method = "class")
+
+rpart.plot(arbol_1)
+
+#Matriz de confusión
+prediccion_1 <- predict(arbol_1, newdata = datos, type = 'class')
+table(prediccion_1, datos$`Clasificación de RCV Global`)
+paste(((table(prediccion_1, datos$`Clasificación de RCV Global`) %>% diag() %>% sum())/table(prediccion_1, datos$`Clasificación de RCV Global`) %>% sum() * 100) %>% round(2), "%")
+
+#Arbol de Regresión
+arbol_regresion <- rpart(formula = `Clasificación de RCV Global` ~ ., data = datos, control = rpart.control(cp = 0), method = "anova")
+rpart.plot(arbol_regresion)
+
+#Matriz confusión
+prediccion_arbol_regresion <- predict(arbol_regresion, newdata = datos)
+table(prediccion_arbol_regresion %>% round(0), datos$`Clasificación de RCV Global`) ->  matriz_confusion_prediccion_arbol_regresion
+matriz_confusion_prediccion_arbol_regresion
+
+#Porcentaje predicción
+paste((matriz_confusion_prediccion_arbol_regresion %>% diag() %>% sum()/matriz_confusion_prediccion_arbol_regresion %>% sum() * 100) %>% round(2), "%")
+
+plotcp(arbol_regresion)
+
+
+arbol_regresion$cptable[which.min(arbol_regresion$cptable[,"xerror"]), "CP"] -> min_error
+
+paste0("CP con el minimo error: ", min_error )
+
+#Arbol regresión con poda
+arbol_regresion$cptable[which.min(arbol_regresion$cptable[,"xerror"]), "CP"] -> min_error
+
+arbol_2 <- rpart(formula = `Clasificación de RCV Global` ~ ., data = datos, control = rpart.control(cp = min_error), method = "anova")
+rpart.plot(arbol_2)
+
+#Matriz confusión
+prediccion_2 <- predict(arbol_2, newdata = datos)
+table(prediccion_2 %>% round(0), datos$`Clasificación de RCV Global`) -> matriz_confusion_regre2
+
+paste((matriz_confusion_regre2 %>% diag() %>% sum()/matriz_confusion_regre2 %>% sum() * 100) %>% round(2), "%")
+
+#Arbol Chaid
+
+chaid_clasif <- chaid(`Clasificación de RCV Global` ~  Genero + Zona + `Fumador Activo` + `¿Diabetes?` + `Hipertensión Arterial Sistemica` + 
+                          `HTA + DM` + `Estadio IRC` + `Antecedentes Fliar  Enfermedad Coronaria` +
+                          `Complicaciones  y Lesiones en Organo Blanco` + `Clasificación perímetro abdominal` +
+                          `CLAIFICACION IMC`, data = datos)
+print(chaid_clasif) 
+plot(chaid_clasif)
+
+#Matriz confusión
+chaid_pred <- predict(chaid_clasif, newdata = datos %>% dplyr::select(c(Genero, Zona, `Fumador Activo`, `¿Diabetes?`, `Hipertensión Arterial Sistemica`, 
+                          `HTA + DM`, `Estadio IRC`, `Antecedentes Fliar  Enfermedad Coronaria`,
+                          `Complicaciones  y Lesiones en Organo Blanco`, `Clasificación perímetro abdominal`,
+                          `CLAIFICACION IMC`)))
+
+table(chaid_pred , datos$`Clasificación de RCV Global`) -> matriz_confusion_chaid
+paste((matriz_confusion_chaid %>% diag() %>% sum()/matriz_confusion_chaid %>% sum() * 100) %>% round(2), "%")
+
+
+© 2020 GitHub, Inc.
+Terms
+Privacy
+Security
+Status
+Help
+Contact GitHub
+Pricing
+API
+Training
+Blog
+About
